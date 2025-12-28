@@ -1,14 +1,15 @@
 #include "ByteReader.h"
 
+#include "DebugOnly.h"
+
 #include <execution>
 #include <atomic>
 
 void ByteReader::readBytes(File* file) {
 	std::ifstream handle{};
-	file->openFile(&handle);
 
-	if (!handle.is_open()) {
-		printf("[ByteReader::readBytes] Provided file isn't open!\n");
+	if (!file->openFile(&handle)) {
+		IN_DEBUG(printf("[ByteReader::readBytes] Provided file isn't open!\n"));
 		file->closeFile();
 		return; // Better be safe, than sorry..
 	}
@@ -55,14 +56,12 @@ bool ByteReader::getByte(uint8_t* buff, std::ifstream& handle) {
 
 	if (handle.bad()) {
 		printf(" -> Failed!\n");
-		printf("[ByteReader::getByte] There was a problem with reading file bytes!\n");
+		IN_DEBUG(printf("[ByteReader::getByte] There was a problem with reading file bytes!\n"));
 	}
 
 	return false;
 }
 
-std::atomic<bool> different_bytes{ false };
-std::atomic<bool> failed{ false };
 bool ByteReader::compareBytes(const std::vector<uint8_t>& bytes_a, const std::vector<uint8_t>& bytes_b) {
 	printf("Comparing bytes!");
 
@@ -76,11 +75,19 @@ bool ByteReader::compareBytes(const std::vector<uint8_t>& bytes_a, const std::ve
 	size_t size{ std::min(bytes_a.size(), bytes_b.size()) }; // Iterate based on the smaller file (DUH, we don't want to go out of range)
 	std::atomic<size_t> byte{ 0 };
 
+	std::atomic<bool> different_bytes{ false };
+	std::atomic<bool> failed{ false };
+	std::atomic<bool> print_all_bytes{ this->print_all };
+
 	// Run in parallel
 	std::for_each(std::execution::par, bytes_a.begin(), bytes_a.begin() + size, [&](auto&) {
 		size_t current_byte{ byte.fetch_add(1) };
 
 		if (bytes_a[current_byte] != bytes_b[current_byte]) {
+			if (failed.load()) { // Insanely hacky, but holy shit is this really the only way to stop a for_each loop, without throwing exceptions??
+				return;
+			}
+
 			if (!different_bytes.load()) { // Disgusting, but pls print only once..
 				different_bytes.store(true);
 				printf(" -> Found different bytes!\n");
@@ -88,11 +95,10 @@ bool ByteReader::compareBytes(const std::vector<uint8_t>& bytes_a, const std::ve
 
 			printf("[Offset: %X] 0x%X vs 0x%X\n", static_cast<unsigned int>(current_byte), bytes_a[current_byte], bytes_b[current_byte]);
 
-			if (!this->print_all) {
+			if (!print_all_bytes.load()) {
+				failed.store(true);
 				return;
 			}
-
-			failed.store(true);
 		}
 	});
 

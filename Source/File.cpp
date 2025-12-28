@@ -1,5 +1,7 @@
 #include "File.h"
 
+#include "DebugOnly.h"
+
 bool File::openFile(std::ifstream* file_handle) {
 	printf("Opening %s", this->path.c_str());
 
@@ -7,15 +9,15 @@ bool File::openFile(std::ifstream* file_handle) {
 
 	if (!file_handle->is_open()) {
 		printf(" -> Failed!\n");
-		printf("[File::openFile] Failed to open file! Path: \"%s\"\n", this->path.c_str());
-		return true;
+		IN_DEBUG(printf("[File::openFile] Failed to open file! Path: \"%s\"\n", this->path.c_str()));
+		return false;
 	}
 
 	printf(" -> Opened!\n");
 
 	this->handle = file_handle;
 
-	return false;
+	return true;
 }
 
 void File::closeFile() {
